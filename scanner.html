@@ -734,22 +734,25 @@ function cleanReaderUI() {
 
 function onScanSuccess(decoded) {
   if (!isScanning) return;
-
-  // Vibrate
   if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
-
-  // Visual feedback
   showRipple();
   setStatus('active');
-
-  // Parse — bisa berupa JSON (dari QR kita) atau plain ID
-  let query = decoded;
+ 
+  // Parse format baru: "ID|ITEMCODE|DESKRIPSI"
+  // atau format lama JSON (backward compatible)
+  let query = decoded.trim();
   try {
     const parsed = JSON.parse(decoded);
-    query = parsed.id || parsed.code || decoded;
-  } catch (_) {}
-
-  searchRoll(String(query).trim());
+    // Format lama (JSON)
+    query = String(parsed.id || parsed.code || decoded);
+  } catch (_) {
+    // Format baru: ambil bagian pertama sebelum '|'
+    if (decoded.includes('|')) {
+      query = decoded.split('|')[0].trim(); // ambil ID-nya
+    }
+  }
+ 
+  searchRoll(query);
 }
 
 function showRipple() {
