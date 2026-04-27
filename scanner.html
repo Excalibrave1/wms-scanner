@@ -226,7 +226,7 @@ html,body { height:100%;width:100%;background:var(--bg);color:var(--text);font-f
 // KONFIGURASI — ganti dengan URL Apps Script Anda
 // Contoh: 'https://script.google.com/macros/s/AKfycb.../exec'
 // ============================================================
-const WMS_URL = 'https://script.google.com/macros/s/AKfycbxLf5XwYyPuXPbQ5ojUruWaN0l0WyDGOIbew1I7Gz7ojISAasDFcvm5JuXkg1lSC5EJ8Q/exec';
+const WMS_URL = 'https://script.google.com/macros/s/AKfycbyYzipghcbhlfuK25PgvKWszmI2riqcrI1Pp4ihnuYSOQOsTcEHRDqrmb08zkJbPMPZ4Q/exec';
 
 // ============================================================
 // STATE
@@ -365,16 +365,11 @@ function searchRoll(query) {
     return;
   }
 
-  // Fetch ke Apps Script via URL parameter
-  // Apps Script doGet membaca e.parameter.action dan e.parameter.query
-  const url = WMS_URL + '?action=findRoll&query=' + encodeURIComponent(query);
-
-  fetch(url, { method: 'GET', redirect: 'follow' })
-    .then(r => {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(data => {
+  // Gunakan JSONP — tidak kena blokir CORS karena pakai <script> tag
+  // Apps Script doGet akan return: callback({...})
+  jsonpRequest(
+    WMS_URL + '?action=findRoll&query=' + encodeURIComponent(query),
+    function(data) {
       hideLoading();
       if (data && data.success) {
         foundRoll = data.data;
@@ -383,12 +378,13 @@ function searchRoll(query) {
         showResultError(data ? data.message : 'Roll tidak ditemukan');
         foundRoll = null;
       }
-    })
-    .catch(err => {
+    },
+    function(err) {
       hideLoading();
-      console.error('WMS fetch error:', err);
+      console.error('WMS error:', err);
       showResultError('Gagal koneksi ke WMS.\nPeriksa WMS_URL dan koneksi internet.');
-    });
+    }
+  );
 }
 
 function showResult(roll) {
@@ -469,7 +465,7 @@ function confirmTransaction() {
     return;
   }
 
-  // Kirim ke Apps Script via URL parameter
+  // Kirim ke Apps Script via JSONP (anti-CORS)
   const params = new URLSearchParams({
     action:        'processTransaction',
     idno_rollawal: foundRoll.idno_rollawal,
@@ -479,40 +475,36 @@ function confirmTransaction() {
     keterangan:    'Via Scanner HP'
   });
 
-  fetch(WMS_URL + '?' + params.toString(), { method: 'GET', redirect: 'follow' })
-    .then(r => {
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      return r.json();
-    })
-    .then(data => {
+  // Simpan tipe dan foundRoll sebelum reset
+  const _tipe = tipe;
+  const _roll = foundRoll;
+
+  jsonpRequest(
+    WMS_URL + '?' + params.toString(),
+    function(data) {
       hideLoading();
       if (data && data.success) {
         showSuccessFlash();
-        showToast(data.message || 'Transaksi ' + tipe + ' berhasil!', 's');
-
-        // Update stok di card
+        showToast(data.message || 'Transaksi ' + _tipe + ' berhasil!', 's');
         if (data.stok_after !== undefined) {
-          foundRoll.stok_saat_ini = data.stok_after;
+          _roll.stok_saat_ini = data.stok_after;
           document.getElementById('resultMeta').textContent =
             'Stok: ' + data.stok_after +
-            '  |  Roll: ' + (foundRoll.no_rollawal || '-') +
-            '  |  Size: ' + (foundRoll.size_mtrl || '-');
+            '  |  Roll: ' + (_roll.no_rollawal || '-') +
+            '  |  Size: ' + (_roll.size_mtrl || '-');
         }
-
-        // Kirim notif ke WMS (jika dibuka via window.open)
-        notifyWMS({ success: true, tipe, qty, idno_rollawal: foundRoll.idno_rollawal });
-
-        // Reset untuk scan berikutnya
+        notifyWMS({ success: true, tipe: _tipe, qty, idno_rollawal: _roll.idno_rollawal });
         setTimeout(resetForNextScan, 3000);
       } else {
         showToast((data ? data.message : '') || 'Transaksi gagal', 'e');
       }
-    })
-    .catch(err => {
+    },
+    function(err) {
       hideLoading();
       console.error('Transaction error:', err);
       showToast('Gagal koneksi ke WMS. Coba lagi.', 'e');
-    });
+    }
+  );
 }
 
 function resetForNextScan() {
@@ -534,6 +526,41 @@ function notifyWMS(data) {
   } catch (e) {
     console.warn('postMessage failed:', e);
   }
+}
+
+// ============================================================
+// JSONP — solusi CORS untuk Google Apps Script
+// fetch() diblokir CORS, <script> tag tidak diblokir
+// Apps Script doGet harus return: callback({...})
+// ============================================================
+function jsonpRequest(url, onSuccess, onError) {
+  const cbName = '_wms_cb_' + Date.now();
+  const timeout = setTimeout(function() {
+    cleanup();
+    if (onError) onError(new Error('Timeout'));
+  }, 15000);
+
+  function cleanup() {
+    clearTimeout(timeout);
+    delete window[cbName];
+    const el = document.getElementById(cbName);
+    if (el) el.remove();
+  }
+
+  window[cbName] = function(data) {
+    cleanup();
+    if (onSuccess) onSuccess(data);
+  };
+
+  const script = document.createElement('script');
+  script.id  = cbName;
+  // Tambah parameter callback ke URL
+  script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
+  script.onerror = function() {
+    cleanup();
+    if (onError) onError(new Error('Script load error'));
+  };
+  document.body.appendChild(script);
 }
 
 // ============================================================
