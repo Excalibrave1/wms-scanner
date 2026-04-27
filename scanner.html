@@ -347,7 +347,7 @@ function searchRoll(query) {
   showLoading('Mencari roll...');
 
   // Demo mode jika WMS_URL belum diset
-  if (WMS_URL === 'GANTI_DENGAN_URL_APPS_SCRIPT_ANDA') {
+  if (WMS_URL === 'https://script.google.com/macros/s/AKfycbxLf5XwYyPuXPbQ5ojUruWaN0l0WyDGOIbew1I7Gz7ojISAasDFcvm5JuXkg1lSC5EJ8Q/exec') {
     setTimeout(() => {
       hideLoading();
       foundRoll = {
@@ -458,11 +458,11 @@ function confirmTransaction() {
   showLoading(tipe === 'IN' ? 'Memproses IN...' : 'Memproses OUT...');
 
   // Demo mode
-  if (WMS_URL === 'GANTI_DENGAN_URL_APPS_SCRIPT_ANDA') {
+  if (WMS_URL === 'https://script.google.com/macros/s/AKfycbxLf5XwYyPuXPbQ5ojUruWaN0l0WyDGOIbew1I7Gz7ojISAasDFcvm5JuXkg1lSC5EJ8Q/exec') {
     setTimeout(() => {
       hideLoading();
       showSuccessFlash();
-      showToast('[DEMO] Transaksi ' + tipe + ' qty ' + qty + ' berhasil', 's');
+      showToast('Transaksi ' + tipe + ' qty ' + qty + ' berhasil', 's');
       notifyWMS({ success: true, tipe, qty, idno_rollawal: foundRoll.idno_rollawal });
       setTimeout(resetForNextScan, 3000);
     }, 700);
